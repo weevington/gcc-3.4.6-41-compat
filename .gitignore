@@ -12,3 +12,6 @@
 *.config
 #.swp*
 *.swo*
+*.o
+*.conf
+*.po
