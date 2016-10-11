@@ -1,0 +1,14 @@
+
+*.rpm
+*.tar
+*.tar.gz
+*.tar.xz
+*.tar.bz
+*~
+*#*
+*.bak
+*.log
+*.mk
+*.config
+#.swp*
+*.swo*
