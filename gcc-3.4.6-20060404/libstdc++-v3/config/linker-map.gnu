@@ -397,3 +397,11 @@ CXXABI_1.3 {
   local:
     *;
 };
+
+
+CXXABI_1.3.1 {
+
+    __cxa_get_exception_ptr;
+
+} CXXABI_1.3;
+
