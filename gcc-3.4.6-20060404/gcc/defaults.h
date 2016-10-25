@@ -696,4 +696,16 @@ You Lose!  You must define PREFERRED_DEBUGGING_TYPE!
 #define EXIT_IGNORE_STACK 0
 #endif
 
+/* On most machines, the CFA coincides with the first incoming parm.  */
+#ifndef ARG_POINTER_CFA_OFFSET
+#define ARG_POINTER_CFA_OFFSET(FNDECL) FIRST_PARM_OFFSET (FNDECL)
+#endif
+
+/* The offset from the incoming value of %sp to the top of the stack frame
+   for the current function.  */
+#ifndef INCOMING_FRAME_SP_OFFSET
+#define INCOMING_FRAME_SP_OFFSET 0
+#endif
+
+
 #endif  /* ! GCC_DEFAULTS_H */

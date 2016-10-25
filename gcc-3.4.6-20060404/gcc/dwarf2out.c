@@ -228,10 +228,10 @@ dw_cfi_node;
    of this structure.  */
 typedef struct cfa_loc GTY(())
 {
-  unsigned long reg;
-  HOST_WIDE_INT offset;
-  HOST_WIDE_INT base_offset;
-  int indirect;            /* 1 if CFA is accessed via a dereference.  */
+   HOST_WIDE_INT offset;
+   HOST_WIDE_INT base_offset;
+   unsigned int reg;
+   int indirect;            /* 1 if CFA is accessed via a dereference.  */
 } dw_cfa_location;
 
 /* All call frame descriptions (FDE's) in the GCC generated DWARF
@@ -419,12 +419,6 @@ static void def_cfa_1 (const char *, dw_cfa_location *);
 #define DWARF_FRAME_REGNUM(REG) DBX_REGISTER_NUMBER (REG)
 #endif
 
-/* The offset from the incoming value of %sp to the top of the stack frame
-   for the current function.  */
-#ifndef INCOMING_FRAME_SP_OFFSET
-#define INCOMING_FRAME_SP_OFFSET 0
-#endif
-
 /* Hook used by __throw.  */
 
 rtx
@@ -651,7 +645,7 @@ add_fde_cfi (const char *label, dw_cfi_ref cfi)
 
 /* Subroutine of lookup_cfa.  */
 
-static inline void
+static void
 lookup_cfa_1 (dw_cfi_ref cfi, dw_cfa_location *loc)
 {
   switch (cfi->dw_cfi_opc)
@@ -681,7 +675,7 @@ lookup_cfa (dw_cfa_location *loc)
 {
   dw_cfi_ref cfi;
 
-  loc->reg = (unsigned long) -1;
+  loc->reg = INVALID_REGNUM;
   loc->offset = 0;
   loc->indirect = 0;
   loc->base_offset = 0;
@@ -725,6 +719,18 @@ dwarf2out_def_cfa (const char *label, unsigned int reg, HOST_WIDE_INT offset)
   def_cfa_1 (label, &loc);
 }
 
+/* Determine if two dw_cfa_location structures define the same data.  */
+
+static bool
+cfa_equal_p (const dw_cfa_location *loc1, const dw_cfa_location *loc2)
+{
+  return (loc1->reg == loc2->reg
+	  && loc1->offset == loc2->offset
+	  && loc1->indirect == loc2->indirect
+	  && (loc1->indirect == 0
+	      || loc1->base_offset == loc2->base_offset));
+}
+
 /* This routine does the actual work.  The CFA is now calculated from
    the dw_cfa_location structure.  */
 
@@ -744,9 +750,7 @@ def_cfa_1 (const char *label, dw_cfa_location *loc_p)
   lookup_cfa (&old_cfa);
 
   /* If nothing changed, no need to issue any call frame instructions.  */
-  if (loc.reg == old_cfa.reg && loc.offset == old_cfa.offset
-      && loc.indirect == old_cfa.indirect
-      && (loc.indirect == 0 || loc.base_offset == old_cfa.base_offset))
+  if (cfa_equal_p (&loc, &old_cfa))
     return;
 
   cfi = new_cfi ();
@@ -761,8 +765,9 @@ def_cfa_1 (const char *label, dw_cfa_location *loc_p)
     }
 
 #ifndef MIPS_DEBUGGING_INFO  /* SGI dbx thinks this means no offset.  */
-  else if (loc.offset == old_cfa.offset && old_cfa.reg != (unsigned long) -1
-	   && !loc.indirect)
+  else if (loc.offset == old_cfa.offset
+           && old_cfa.reg != INVALID_REGNUM
+ 	   && !loc.indirect) 
     {
       /* Construct a "DW_CFA_def_cfa_register <register>" instruction,
 	 indicating the CFA register has changed to <register> but the
@@ -3098,29 +3103,41 @@ build_cfa_loc (dw_cfa_location *cfa)
 {
   struct dw_loc_descr_struct *head, *tmp;
 
-  if (cfa->indirect == 0)
-    abort ();
-
-  if (cfa->base_offset)
-    {
-      if (cfa->reg <= 31)
-	head = new_loc_descr (DW_OP_breg0 + cfa->reg, cfa->base_offset, 0);
+  if (cfa->indirect)
+  {
+      if (cfa->base_offset)
+      {
+         if (cfa->reg <= 31)
+           head = new_loc_descr (DW_OP_breg0 + cfa->reg, cfa->base_offset, 0);
+         else
+           head = new_loc_descr (DW_OP_bregx, cfa->reg, cfa->base_offset);
+      }
+      else if (cfa->reg <= 31)
+        head = new_loc_descr (DW_OP_reg0 + cfa->reg, 0, 0);
       else
-	head = new_loc_descr (DW_OP_bregx, cfa->reg, cfa->base_offset);
-    }
-  else if (cfa->reg <= 31)
-    head = new_loc_descr (DW_OP_reg0 + cfa->reg, 0, 0);
-  else
-    head = new_loc_descr (DW_OP_regx, cfa->reg, 0);
+	    head = new_loc_descr (DW_OP_regx, cfa->reg, 0);
 
-  head->dw_loc_oprnd1.val_class = dw_val_class_const;
-  tmp = new_loc_descr (DW_OP_deref, 0, 0);
-  add_loc_descr (&head, tmp);
-  if (cfa->offset != 0)
-    {
-      tmp = new_loc_descr (DW_OP_plus_uconst, cfa->offset, 0);
+      head->dw_loc_oprnd1.val_class = dw_val_class_const;
+      tmp = new_loc_descr (DW_OP_deref, 0, 0);
       add_loc_descr (&head, tmp);
-    }
+      if (cfa->offset != 0)
+ 	  {
+        tmp = new_loc_descr (DW_OP_plus_uconst, cfa->offset, 0);
+        add_loc_descr (&head, tmp);
+  	  }
+  } 
+  else
+  { 
+    if (cfa->offset == 0)
+	  if (cfa->reg <= 31)
+	    head = new_loc_descr (DW_OP_reg0 + cfa->reg, 0, 0);
+	  else
+	    head = new_loc_descr (DW_OP_regx, cfa->reg, 0);
+    else if (cfa->reg <= 31)
+	  head = new_loc_descr (DW_OP_breg0 + cfa->reg, cfa->offset, 0);
+    else
+	  head = new_loc_descr (DW_OP_bregx, cfa->reg, cfa->offset);    
+  }
 
   return head;
 }
@@ -3607,6 +3624,10 @@ static GTY(()) int label_num;
 
 #ifdef DWARF2_DEBUGGING_INFO
 
+/* Offset from the "steady-state frame pointer" to the CFA,
+   within the current function.  */
+static HOST_WIDE_INT frame_pointer_cfa_offset;
+
 /* Forward declarations for functions defined in this file.  */
 
 static int is_pseudo_reg (rtx);
@@ -3751,11 +3772,11 @@ static dw_loc_descr_ref reg_loc_descriptor (rtx);
 static dw_loc_descr_ref one_reg_loc_descriptor (unsigned int);
 static dw_loc_descr_ref multiple_reg_loc_descriptor (rtx, rtx);
 static dw_loc_descr_ref int_loc_descriptor (HOST_WIDE_INT);
-static dw_loc_descr_ref based_loc_descr (unsigned, HOST_WIDE_INT, bool);
+static dw_loc_descr_ref based_loc_descr (rtx, HOST_WIDE_INT); 
 static int is_based_loc (rtx);
-static dw_loc_descr_ref mem_loc_descriptor (rtx, enum machine_mode mode, bool);
+static dw_loc_descr_ref mem_loc_descriptor (rtx, enum machine_mode mode);
 static dw_loc_descr_ref concat_loc_descriptor (rtx, rtx);
-static dw_loc_descr_ref loc_descriptor (rtx, bool);
+static dw_loc_descr_ref loc_descriptor (rtx);
 static dw_loc_descr_ref loc_descriptor_from_tree (tree, int);
 static HOST_WIDE_INT ceiling (HOST_WIDE_INT, unsigned int);
 static tree field_type (tree);
@@ -8170,8 +8191,19 @@ dbx_reg_number (rtx rtl)
 {
   unsigned regno = REGNO (rtl);
 
+  if (! (HARD_FRAME_POINTER_REGNUM == ARG_POINTER_REGNUM
+	 || rtl != arg_pointer_rtx))
+    abort ();
+  if (! (HARD_FRAME_POINTER_REGNUM == FRAME_POINTER_REGNUM
+	 || rtl != frame_pointer_rtx))
+    abort ();
+
   if (regno >= FIRST_PSEUDO_REGISTER)
     abort ();
+
+  #ifdef LEAF_REG_REMAP
+    regno = LEAF_REG_REMAP (regno);
+  #endif
 
   return DBX_REGISTER_NUMBER (regno);
 }
@@ -8182,20 +8214,17 @@ dbx_reg_number (rtx rtl)
 static dw_loc_descr_ref
 reg_loc_descriptor (rtx rtl)
 {
-  unsigned reg;
   rtx regs;
 
   if (REGNO (rtl) >= FIRST_PSEUDO_REGISTER)
     return 0;
 
-  reg = dbx_reg_number (rtl);
   regs = (*targetm.dwarf_register_span) (rtl);
 
-  if (HARD_REGNO_NREGS (REGNO (rtl), GET_MODE (rtl)) > 1
-      || regs)
+  if (HARD_REGNO_NREGS(REGNO (rtl), GET_MODE (rtl)) > 1 || regs)
     return multiple_reg_loc_descriptor (rtl, regs);
   else
-    return one_reg_loc_descriptor (reg);
+    return one_reg_loc_descriptor (dbx_reg_number (rtl));
 }
 
 /* Return a location descriptor that designates a machine register for
@@ -8300,25 +8329,55 @@ int_loc_descriptor (HOST_WIDE_INT i)
   return new_loc_descr (op, i, 0);
 }
 
+/* Return an offset from an eliminable register to the post-prologue
+   frame pointer.  */
+
+static HOST_WIDE_INT
+eliminate_reg_to_offset (rtx reg)
+{
+  HOST_WIDE_INT offset = 0;
+
+  reg = eliminate_regs (reg, VOIDmode, NULL_RTX);
+  if (GET_CODE (reg) == PLUS)
+    {
+      offset = INTVAL (XEXP (reg, 1));
+      reg = XEXP (reg, 0);
+    }
+  if (! (reg == (frame_pointer_needed ? hard_frame_pointer_rtx
+		 : stack_pointer_rtx)))
+    abort ();
+
+  return offset;
+}
+
+
 /* Return a location descriptor that designates a base+offset location.  */
 
 static dw_loc_descr_ref
-based_loc_descr (unsigned int reg, HOST_WIDE_INT offset, bool can_use_fbreg)
+based_loc_descr (rtx reg, HOST_WIDE_INT offset)
 {
   dw_loc_descr_ref loc_result;
-  /* For the "frame base", we use the frame pointer or stack pointer
-     registers, since the RTL for local variables is relative to one of
-     them.  */
-  unsigned fp_reg = DBX_REGISTER_NUMBER (frame_pointer_needed
-					 ? HARD_FRAME_POINTER_REGNUM
-					 : STACK_POINTER_REGNUM);
+  
+  /* We only use "frame base" when we're sure we're talking about the
+     post-prologue local stack frame.  We do this by *not* running
+     register elimination until this point, and recognizing the special
+     argument pointer and soft frame pointer rtx's.  */
+  if (reg == arg_pointer_rtx || reg == frame_pointer_rtx)
+  {
+    offset += eliminate_reg_to_offset (reg);
+    offset += frame_pointer_cfa_offset;
 
-  if (reg == fp_reg && can_use_fbreg)
     loc_result = new_loc_descr (DW_OP_fbreg, offset, 0);
-  else if (reg <= 31)
-    loc_result = new_loc_descr (DW_OP_breg0 + reg, offset, 0);
+  }
   else
-    loc_result = new_loc_descr (DW_OP_bregx, reg, offset);
+  {
+    unsigned int regno = dbx_reg_number (reg);
+
+    if (regno <= 31)
+      loc_result = new_loc_descr (DW_OP_breg0 + regno, offset, 0);
+    else
+      loc_result = new_loc_descr (DW_OP_bregx, regno, offset);
+  }
 
   return loc_result;
 }
@@ -8347,15 +8406,13 @@ is_based_loc (rtx rtl)
    MODE is the mode of the memory reference, needed to handle some
    autoincrement addressing modes.
 
-   CAN_USE_FBREG is a flag whether we can use DW_AT_frame_base in the location
-   list for RTL. We can't use it when we are emitting location list for
-   virtual variable frame_base_decl (i.e. a location list for DW_AT_frame_base)
-   which describes how frame base changes when !frame_pointer_needed.
+   CAN_USE_FBREG is a flag whether we can use DW_AT_frame_base in the
+   location list for RTL.
 
    Return 0 if we can't represent the location.  */
 
 static dw_loc_descr_ref
-mem_loc_descriptor (rtx rtl, enum machine_mode mode, bool can_use_fbreg)
+mem_loc_descriptor (rtx rtl, enum machine_mode mode)
 {
   dw_loc_descr_ref mem_loc_result = NULL;
 
@@ -8401,8 +8458,8 @@ mem_loc_descriptor (rtx rtl, enum machine_mode mode, bool can_use_fbreg)
 	 memory) so DWARF consumers need to be aware of the subtle
 	 distinction between OP_REG and OP_BASEREG.  */
       if (REGNO (rtl) < FIRST_PSEUDO_REGISTER)
-	mem_loc_result = based_loc_descr (dbx_reg_number (rtl), 0,
-					  can_use_fbreg);
+        mem_loc_result = based_loc_descr (rtl, 0);
+
       break;
 
     case MEM:

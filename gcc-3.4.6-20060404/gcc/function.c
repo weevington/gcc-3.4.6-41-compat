@@ -2824,12 +2824,6 @@ static int cfa_offset;
 #endif
 #endif
 
-/* On most machines, the CFA coincides with the first incoming parm.  */
-
-#ifndef ARG_POINTER_CFA_OFFSET
-#define ARG_POINTER_CFA_OFFSET(FNDECL) FIRST_PARM_OFFSET (FNDECL)
-#endif
-
 /* Build up a (MEM (ADDRESSOF (REG))) rtx for a register REG that just
    had its address taken.  DECL is the decl or SAVE_EXPR for the
    object stored in the register, for later use if we do need to force

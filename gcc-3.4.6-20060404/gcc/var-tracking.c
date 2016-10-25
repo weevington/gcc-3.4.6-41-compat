@@ -264,19 +264,12 @@ static htab_t changed_variables;
 /* Shall notes be emitted?  */
 static bool emit_notes;
 
-/* Fake variable for stack pointer.  */
-tree frame_base_decl;
-
-/* Stack adjust caused by function prologue.  */
-static HOST_WIDE_INT frame_stack_adjust;
-
 /* Local function prototypes.  */
 static void stack_adjust_offset_pre_post (rtx, HOST_WIDE_INT *,
 					  HOST_WIDE_INT *);
 static void insn_stack_adjust_offset_pre_post (rtx, HOST_WIDE_INT *,
 					       HOST_WIDE_INT *);
 static void bb_stack_adjust_offset (basic_block);
-static HOST_WIDE_INT prologue_stack_adjust (void);
 static bool vt_stack_adjustments (void);
 static rtx adjust_stack_reference (rtx, HOST_WIDE_INT);
 static hashval_t variable_htab_hash (const void *);
@@ -331,7 +324,6 @@ static void dump_dataflow_set (dataflow_set *);
 static void dump_dataflow_sets (void);
 
 static void variable_was_changed (variable, htab_t);
-static void set_frame_base_location (dataflow_set *, rtx);
 static void set_variable_part (dataflow_set *, rtx, tree, HOST_WIDE_INT);
 static void delete_variable_part (dataflow_set *, rtx, tree, HOST_WIDE_INT);
 static int emit_note_insn_var_location (void **, void *);
@@ -487,38 +479,6 @@ bb_stack_adjust_offset (basic_block bb)
   VTI (bb)->out.stack_adjust = offset;
 }
 
-/* Compute stack adjustment caused by function prologue.  */
-
-static HOST_WIDE_INT
-prologue_stack_adjust (void)
-{
-  HOST_WIDE_INT offset = 0;
-  basic_block bb = ENTRY_BLOCK_PTR->next_bb;
-  rtx insn;
-  rtx end;
-
-  if (!BB_END (bb))
-    return 0;
-
-  end = NEXT_INSN (BB_END (bb));
-  for (insn = BB_HEAD (bb); insn != end; insn = NEXT_INSN (insn))
-    {
-      if (GET_CODE (insn) == NOTE
-	  && NOTE_LINE_NUMBER (insn) == NOTE_INSN_PROLOGUE_END)
-	break;
-
-      if (INSN_P (insn))
-	{
-	  HOST_WIDE_INT tmp;
-
-	  insn_stack_adjust_offset_pre_post (insn, &tmp, &tmp);
-	  offset += tmp;
-	}
-    }
-
-  return offset;
-}
-
 /* Compute stack adjustments for all blocks by traversing DFS tree.
    Return true when the adjustments on all incoming edges are consistent.
    Heavily borrowed from flow_depth_first_order_compute.  */
@@ -531,7 +491,7 @@ vt_stack_adjustments (void)
 
   /* Initialize entry block.  */
   VTI (ENTRY_BLOCK_PTR)->visited = true;
-  VTI (ENTRY_BLOCK_PTR)->out.stack_adjust = frame_stack_adjust;
+  VTI (ENTRY_BLOCK_PTR)->out.stack_adjust = INCOMING_FRAME_SP_OFFSET;
 
   /* Allocate stack for back-tracking up CFG.  */
   stack = xmalloc ((n_basic_blocks + 1) * sizeof (edge));
@@ -585,27 +545,22 @@ vt_stack_adjustments (void)
   return true;
 }
 
-/* Adjust stack reference MEM by ADJUSTMENT bytes and return the new rtx.  */
+/* Adjust stack reference MEM by ADJUSTMENT bytes and make it relative
+   to the argument pointer.  Return the new rtx.  */
 
 static rtx
 adjust_stack_reference (rtx mem, HOST_WIDE_INT adjustment)
 {
-  rtx adjusted_mem;
-  rtx tmp;
+  rtx addr, cfa, tmp;
 
-  if (adjustment == 0)
-    return mem;
+  adjustment -= ARG_POINTER_CFA_OFFSET (current_function_decl);
+  cfa = plus_constant (arg_pointer_rtx, adjustment);
 
-  adjusted_mem = copy_rtx (mem);
-  XEXP (adjusted_mem, 0) = replace_rtx (XEXP (adjusted_mem, 0),
-					stack_pointer_rtx,
-					gen_rtx_PLUS (Pmode, stack_pointer_rtx,
-						      GEN_INT (adjustment)));
-  tmp = simplify_rtx (XEXP (adjusted_mem, 0));
+  tmp = simplify_rtx (addr);
   if (tmp)
-    XEXP (adjusted_mem, 0) = tmp;
+    addr = tmp;
 
-  return adjusted_mem;
+  return replace_equiv_address_nv (mem, addr);
 }
 
 /* The hash function for variable_htab, computes the hash value
@@ -1784,8 +1739,7 @@ dump_attrs_list (attrs list)
   for (; list; list = list->next)
     {
       print_mem_expr (rtl_dump_file, list->decl);
-      fprintf (rtl_dump_file, "+");
-      fprintf (rtl_dump_file, HOST_WIDE_INT_PRINT_DEC, list->offset);
+      fprintf (rtl_dump_file, "+" HOST_WIDE_INT_PRINT_DEC, list->offset);
     }
   fprintf (rtl_dump_file, "\n");
 }
@@ -1917,37 +1871,6 @@ variable_was_changed (variable var, htab_t htab)
 	    htab_clear_slot (htab, slot);
 	}
     }
-}
-
-/* Set the location of frame_base_decl to LOC in dataflow set SET.  This
-   function expects that frame_base_decl has already one location for offset 0
-   in the variable table.  */
-
-static void
-set_frame_base_location (dataflow_set *set, rtx loc)
-{
-  variable var;
-  
-  var = htab_find_with_hash (set->vars, frame_base_decl,
-			     VARIABLE_HASH_VAL (frame_base_decl));
-#ifdef ENABLE_CHECKING
-  if (!var)
-    abort ();
-  if (var->n_var_parts != 1)
-    abort ();
-  if (var->var_part[0].offset != 0)
-    abort ();
-  if (!var->var_part[0].loc_chain)
-    abort ();
-#endif
-
-  /* If frame_base_decl is shared unshare it first.  */
-  if (var->refcount > 1)
-    var = unshare_variable (set, var);
-
-  var->var_part[0].loc_chain->loc = loc;
-  var->var_part[0].cur_loc = loc;
-  variable_was_changed (var, set->vars);
 }
 
 /* Set the part of variable's location in the dataflow set SET.  The variable
@@ -2406,15 +2329,7 @@ emit_notes_in_bb (basic_block bb)
 	    break;
 
 	  case MO_ADJUST:
-	    {
-	      rtx base;
-
-	      set.stack_adjust += VTI (bb)->mos[i].u.adjust;
-	      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
-							set.stack_adjust));
-	      set_frame_base_location (&set, base);
-	      emit_notes_for_changes (insn, EMIT_NOTE_AFTER_INSN);
-	    }
+	    set.stack_adjust += VTI (bb)->mos[i].u.adjust;
 	    break;
 	}
     }
@@ -2524,7 +2439,6 @@ vt_add_function_parameters (void)
 	abort ();
 #endif
 
-      incoming = eliminate_regs (incoming, 0, NULL_RTX);
       out = &VTI (ENTRY_BLOCK_PTR)->out;
 
       if (GET_CODE (incoming) == REG)
@@ -2538,9 +2452,7 @@ vt_add_function_parameters (void)
 	  set_variable_part (out, incoming, parm, offset);
 	}
       else if (GET_CODE (incoming) == MEM)
-	{
-	  set_variable_part (out, incoming, parm, offset);
-	}
+        set_variable_part (out, incoming, parm, offset);
     }
 }
 
@@ -2686,27 +2598,6 @@ vt_initialize (void)
 				   NULL);
   vt_add_function_parameters ();
 
-  if (!frame_pointer_needed)
-    {
-      rtx base;
-
-      /* Create fake variable for tracking stack pointer changes.  */
-      frame_base_decl = make_node (VAR_DECL);
-      DECL_NAME (frame_base_decl) = get_identifier ("___frame_base_decl");
-      TREE_TYPE (frame_base_decl) = char_type_node;
-      DECL_ARTIFICIAL (frame_base_decl) = 1;
-      DECL_IGNORED_P (frame_base_decl) = 1;
-
-      /* Set its initial "location".  */
-      frame_stack_adjust = -prologue_stack_adjust ();
-      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
-						frame_stack_adjust));
-      set_variable_part (&VTI (ENTRY_BLOCK_PTR)->out, base, frame_base_decl, 0);
-    }
-  else
-    {
-      frame_base_decl = NULL;
-    }
 }
 
 /* Free the data structures needed for variable tracking.  */
