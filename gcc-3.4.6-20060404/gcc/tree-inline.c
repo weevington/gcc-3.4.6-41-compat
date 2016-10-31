@@ -1251,6 +1251,7 @@ expand_call_inline (tree *tp, int *walk_subtrees, void *data)
   tree args;
   tree return_slot_addr;
   const char *reason;
+  location_t incoming_loc = input_location;
 
   /* See what we've got.  */
   id = (inline_data *) data;
@@ -1461,8 +1462,11 @@ expand_call_inline (tree *tp, int *walk_subtrees, void *data)
 
   /* Tell the debugging backends that this block represents the
      outermost scope of the inlined function.  */
-  if (SCOPE_STMT_BLOCK (scope_stmt))
-    BLOCK_ABSTRACT_ORIGIN (SCOPE_STMT_BLOCK (scope_stmt)) = DECL_ORIGIN (fn);
+  if (SCOPE_STMT_BLOCK (scope_stmt)) 
+    {
+      BLOCK_ABSTRACT_ORIGIN (SCOPE_STMT_BLOCK (scope_stmt)) = DECL_ORIGIN (fn);
+      BLOCK_SOURCE_LOCATION (SCOPE_STMT_BLOCK (scope_stmt)) = incoming_loc;
+    }
 
   /* Declare the return variable for the function.  */
   COMPOUND_BODY (stmt)
