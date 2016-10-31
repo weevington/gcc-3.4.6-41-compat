@@ -903,6 +903,13 @@ struct tree_exp GTY(())
 #define BLOCK_FRAGMENT_ORIGIN(NODE) (BLOCK_CHECK (NODE)->block.fragment_origin)
 #define BLOCK_FRAGMENT_CHAIN(NODE) (BLOCK_CHECK (NODE)->block.fragment_chain)
 
+/* For an inlined function, this gives the location where it was called
+   from.  This is only set in the top level block, which corresponds to the
+   inlined function scope.  This is used in the debug output routines.  */
+
+#define BLOCK_SOURCE_LOCATION(NODE) (BLOCK_CHECK (NODE)->block.locus)
+
+
 struct tree_block GTY(())
 {
   struct tree_common common;
@@ -917,8 +924,10 @@ struct tree_block GTY(())
   tree abstract_origin;
   tree fragment_origin;
   tree fragment_chain;
+  location_t locus;
+
 };
-
+
 /* Define fields and accessors for nodes representing data types.  */
 
 /* See tree.def for documentation of the use of these fields.
@@ -2028,7 +2037,7 @@ enum tls_model {
 
 extern enum tls_model flag_tls_default;
 
-
+
 /* A pointer-to-function member type looks like:
 
      struct {

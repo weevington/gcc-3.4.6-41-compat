@@ -346,6 +346,7 @@ remap_block (tree *block, tree decls, inline_data *id)
       new_block = make_node (BLOCK);
       TREE_USED (new_block) = TREE_USED (old_block);
       BLOCK_ABSTRACT_ORIGIN (new_block) = old_block;
+      BLOCK_SOURCE_LOCATION (new_block) = BLOCK_SOURCE_LOCATION (old_block);
       SCOPE_STMT_BLOCK (scope_stmt) = new_block;
 
       /* Remap its variables.  */
@@ -420,6 +421,7 @@ remap_block (tree *block, tree decls, inline_data *id)
   new_block = make_node (BLOCK);
   TREE_USED (new_block) = TREE_USED (old_block);
   BLOCK_ABSTRACT_ORIGIN (new_block) = old_block;
+  BLOCK_SOURCE_LOCATION (new_block) = BLOCK_SOURCE_LOCATION (old_block);
   BLOCK_SUBBLOCKS (new_block) = BLOCK_SUBBLOCKS (old_block);
   TREE_SIDE_EFFECTS (new_block) = TREE_SIDE_EFFECTS (old_block);
   TREE_TYPE (new_block) = TREE_TYPE (old_block);

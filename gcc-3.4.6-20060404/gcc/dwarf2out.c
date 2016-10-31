@@ -12837,6 +12837,12 @@ lookup_filename (const char *file_name)
   return i;
 }
 
+/* If the assembler will construct the file table, then translate the compiler
+   internal file table number into the assembler file table number, and emit
+   a .file directive if we haven't already emitted one yet.  The file table
+   numbers are different because we prune debug info for unused variables and
+   types, which may include filenames.  */
+
 static int
 maybe_emit_file (int fileno)
 {
@@ -12856,6 +12862,8 @@ maybe_emit_file (int fileno)
   else
     return fileno;
 }
+
+/* Initialize the compiler internal file table.  */
 
 static void
 init_file_table (void)
@@ -13220,7 +13228,7 @@ prune_unused_types_walk_attribs (dw_die_ref die)
 	     Make sure that it will get emitted.  */
 	  prune_unused_types_mark (a->dw_attr_val.v.val_die_ref.die, 1);
 	}
-      else if (a->dw_attr == DW_AT_decl_file)
+      else if (a->dw_attr == DW_AT_decl_file || a->dw_attr == DW_AT_call_file)
 	{
 	  /* A reference to a file.  Make sure the file name is emitted.  */
 	  a->dw_attr_val.v.val_unsigned =
