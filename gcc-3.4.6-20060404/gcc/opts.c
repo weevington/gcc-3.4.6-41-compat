@@ -1461,6 +1461,10 @@ common_handle_option (size_t scode, const char *arg,
       flag_var_tracking = value;
       break;
 
+    case OPT_fframe_base_loclist:
+      flag_frame_base_loclist = value;
+      break;
+
     case OPT_fverbose_asm:
       flag_verbose_asm = value;
       break;

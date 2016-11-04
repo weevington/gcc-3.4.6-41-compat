@@ -746,6 +746,11 @@ extern int flag_remove_unreachable_functions;
 /* Nonzero if we should track variables.  */
 extern int flag_var_tracking;
 
+/* Nonzero if DWARF2 DW_AT_frame_base can be a location list.  */
+extern int flag_frame_base_loclist;
+
+
+
 /* A string that's used when a random name is required.  NULL means
    to make it really random.  */
 

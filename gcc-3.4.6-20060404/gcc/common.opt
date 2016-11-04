@@ -718,6 +718,10 @@ fvar-tracking
 Common
 Perform variable tracking
 
+fframe-base-loclist
+Common
+Allow use of DWARF2 location lists for frame base
+
 fverbose-asm
 Common
 Add extra commentary to assembler output
