@@ -254,14 +254,14 @@ define__GNUC__ (void)
 {
   /* The format of the version string, enforced below, is
      ([^0-9]*-)?[0-9]+[.][0-9]+([.][0-9]+)?([- ].*)?  */
-  const char *q, *v = version_string;
+  const char *q, *v = version_string, *vstart, *vend;
 
   while (*v && ! ISDIGIT (*v))
     v++;
   if (!*v || (v > version_string && v[-1] != '-'))
     abort ();
 
-  q = v;
+  vstart = q = v;
   while (ISDIGIT (*v))
     v++;
   builtin_define_with_value_n ("__GNUC__", q, v - q);
@@ -289,6 +289,30 @@ define__GNUC__ (void)
 
   if (*v && *v != ' ' && *v != '-')
     abort ();
+
+  vend = v;
+  v = strchr (v, '(');
+  if (v != NULL && strncmp (v + 1, "Red Hat ", 8) == 0)
+    {
+      v += 9;
+      if (strncmp (v, "Linux ", 6) == 0)
+	v += 6;
+
+      if (strncmp (v, vstart, vend - vstart) != 0
+	  || v[vend - vstart] != '-')
+	abort ();
+
+      v += vend - vstart + 1;
+      q = v;
+      if (!ISDIGIT (*v))
+	abort ();
+      while (ISDIGIT (*v))
+	v++;
+      builtin_define_with_value_n ("__GNUC_RH_RELEASE__", q, v - q);
+
+      if (*v && *v != ')' && *v != '.')
+	abort ();
+    }
 }
 
 /* Hook that registers front end and target-specific built-ins.  */
